@@ -1,0 +1,1156 @@
+/**
+ * NebulaX - Australian Radio Telescope Integration
+ * Services for ASKAP, MWA, Parkes, and ATCA data access
+ *
+ * This integration demonstrates understanding of CSIRO's radio astronomy infrastructure
+ * and the future Square Kilometre Array (SKA) project.
+ */
+
+import axios from 'axios'
+import type { Observation, ApiResponse, SkyCoordinates } from '@/types'
+
+// ============================================
+// Configuration
+// ============================================
+
+const CASDA_BASE = 'https://casda.csiro.au'
+const CASDA_TAP = `${CASDA_BASE}/votools/tap/sync`
+const CASDA_SIA = `${CASDA_BASE}/votools/sia2/query`
+
+// Placeholder images for radio observations (fallback)
+const RADIO_PLACEHOLDER_IMAGES = {
+  askap: '/images/askap-placeholder.svg',
+  parkes: '/images/parkes-placeholder.svg',
+  mwa: '/images/mwa-placeholder.svg',
+  generic: '/images/radio-placeholder.svg',
+}
+
+// Real NASA imagery for radio astronomy observations
+// Source: NASA Image and Video Library (images.nasa.gov) - public domain
+const NASA_RADIO_IMAGES = {
+  // Multi-wavelength and radio composite images
+  herculesA: 'https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001618/GSFC_20171208_Archive_e001618~medium.jpg',
+  centaurusA: 'https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e002087/GSFC_20171208_Archive_e002087~medium.jpg',
+  m106Radio: 'https://images-assets.nasa.gov/image/PIA10204/PIA10204~medium.jpg',
+  andromeda: 'https://images-assets.nasa.gov/image/PIA25163/PIA25163~medium.jpg',
+  triangulum: 'https://images-assets.nasa.gov/image/PIA25165/PIA25165~medium.jpg',
+  smc: 'https://images-assets.nasa.gov/image/PIA25164/PIA25164~medium.jpg',
+  // Pulsars and transients
+  pulsarArtist: 'https://images-assets.nasa.gov/image/PIA21085/PIA21085~medium.jpg',
+  pulsarEclipse: 'https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001984/GSFC_20171208_Archive_e001984~medium.jpg',
+  fastRadioBurst: 'https://images-assets.nasa.gov/image/PIA26274/PIA26274~medium.jpg',
+  // Supernova remnants
+  crabNebula: 'https://images-assets.nasa.gov/image/PIA03606/PIA03606~medium.jpg',
+  sn1987a: 'https://images-assets.nasa.gov/image/stsci-h-p1708c-m-2000x2000/stsci-h-p1708c-m-2000x2000~medium.jpg',
+  w49b: 'https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e002134/GSFC_20171208_Archive_e002134~medium.jpg',
+  tychoRemnant: 'https://images-assets.nasa.gov/image/PIA11435/PIA11435~small.jpg',
+  // Galaxy clusters and cosmic structures
+  galaxyCluster: 'https://images-assets.nasa.gov/image/PIA20052/PIA20052~medium.jpg',
+  bentJets: 'https://images-assets.nasa.gov/image/PIA13638/PIA13638~medium.jpg',
+  blackHoleJets: 'https://images-assets.nasa.gov/image/PIA13168/PIA13168~medium.jpg',
+  // Galactic center
+  galacticCenter: 'https://images-assets.nasa.gov/image/PIA25449/PIA25449~medium.jpg',
+}
+
+// Australian telescope information
+export const AUSTRALIAN_TELESCOPES = {
+  askap: {
+    name: 'ASKAP',
+    fullName: 'Australian Square Kilometre Array Pathfinder',
+    location: 'Murchison Radio-astronomy Observatory, Western Australia',
+    coordinates: { lat: -26.697, lon: 116.631 },
+    description: 'A precursor to SKA-Low, ASKAP uses phased array feeds for wide-field radio imaging.',
+    wavelengthRange: '70cm - 3cm (700 MHz - 1.8 GHz)',
+    keyProjects: ['WALLABY (HI survey)', 'EMU (Evolutionary Map of the Universe)', 'VAST (Variables and Slow Transients)'],
+    dishes: 36,
+    dishDiameter: 12, // meters
+  },
+  mwa: {
+    name: 'MWA',
+    fullName: 'Murchison Widefield Array',
+    location: 'Murchison Radio-astronomy Observatory, Western Australia',
+    coordinates: { lat: -26.703, lon: 116.671 },
+    description: 'A low-frequency radio telescope, precursor to SKA-Low.',
+    wavelengthRange: '3.5m - 80cm (80 - 300 MHz)',
+    keyProjects: ['EoR (Epoch of Reionization)', 'GLEAM (GaLactic and Extragalactic All-sky MWA survey)'],
+    tiles: 4096,
+  },
+  parkes: {
+    name: 'Parkes',
+    fullName: 'Parkes Radio Telescope (The Dish)',
+    location: 'Parkes, New South Wales',
+    coordinates: { lat: -32.998, lon: 148.263 },
+    description: 'Iconic 64-meter radio telescope, famous for receiving Apollo 11 TV transmissions.',
+    wavelengthRange: '60cm - 1.3cm (0.5 - 24 GHz)',
+    keyProjects: ['Pulsar timing', 'SETI', 'Fast Radio Bursts'],
+    dishDiameter: 64, // meters
+  },
+  atca: {
+    name: 'ATCA',
+    fullName: 'Australia Telescope Compact Array',
+    location: 'Narrabri, New South Wales',
+    coordinates: { lat: -30.313, lon: 149.550 },
+    description: 'Six 22-meter dishes operating as an interferometer.',
+    wavelengthRange: '25cm - 3mm (1.1 - 105 GHz)',
+    keyProjects: ['Galaxy surveys', 'Molecular line studies', 'Transient follow-up'],
+    dishes: 6,
+    dishDiameter: 22,
+  },
+  ska: {
+    name: 'SKA',
+    fullName: 'Square Kilometre Array',
+    location: 'Murchison (SKA-Low) & South Africa (SKA-Mid)',
+    coordinates: { lat: -26.82, lon: 116.76 },
+    description: 'The world\'s largest radio telescope, currently under construction.',
+    wavelengthRange: '4m - 1.5cm (50 MHz - 20 GHz)',
+    keyProjects: ['Dark energy', 'Cosmic magnetism', 'Gravitational waves', 'SETI', 'Pulsars'],
+    expectedFirstLight: '2027',
+  },
+} as const
+
+export type AustralianTelescope = keyof typeof AUSTRALIAN_TELESCOPES
+
+// ============================================
+// Types for CASDA/VOTable responses
+// ============================================
+
+interface CASDACatalogEntry {
+  obs_id: string
+  target_name: string
+  s_ra: number
+  s_dec: number
+  t_min: number
+  t_exptime: number
+  instrument_name: string
+  obs_collection: string
+  access_url?: string
+  thumbnail_url?: string
+  project_code?: string
+  obs_release_date?: string
+}
+
+// ============================================
+// CASDA TAP Query Service
+// ============================================
+
+/**
+ * Execute an ADQL query against CASDA TAP service
+ * ADQL (Astronomical Data Query Language) is SQL-like
+ */
+export async function queryCASDATAP(
+  adqlQuery: string
+): Promise<ApiResponse<Record<string, unknown>[]>> {
+  try {
+    const params = new URLSearchParams({
+      REQUEST: 'doQuery',
+      LANG: 'ADQL',
+      FORMAT: 'json',
+      QUERY: adqlQuery,
+    })
+
+    const response = await axios.post(CASDA_TAP, params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 30000,
+    })
+
+    return {
+      success: true,
+      data: response.data.data || [],
+      meta: {
+        requestId: `casda-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+      },
+    }
+  } catch (error) {
+    console.error('CASDA TAP query error:', error)
+    return {
+      success: false,
+      error: {
+        code: 'CASDA_TAP_ERROR',
+        message: 'Failed to query CASDA TAP service',
+      },
+    }
+  }
+}
+
+/**
+ * Search ASKAP observations by position
+ */
+export async function searchASKAPByPosition(
+  coordinates: SkyCoordinates,
+  radiusDegrees: number = 1.0
+): Promise<ApiResponse<Observation[]>> {
+  const query = `
+    SELECT TOP 100
+      obs_id, target_name, s_ra, s_dec, t_min, t_exptime,
+      instrument_name, obs_collection, access_url, project_code
+    FROM ivoa.ObsCore
+    WHERE obs_collection = 'ASKAP'
+      AND CONTAINS(POINT('ICRS', s_ra, s_dec),
+                   CIRCLE('ICRS', ${coordinates.ra}, ${coordinates.dec}, ${radiusDegrees})) = 1
+    ORDER BY t_min DESC
+  `
+
+  const result = await queryCASDATAP(query)
+
+  if (!result.success) {
+    return result as unknown as ApiResponse<Observation[]>
+  }
+
+  const observations = (result.data || []).map((row) => transformCASDATOObservation(row as unknown as CASDACatalogEntry))
+
+  return {
+    success: true,
+    data: observations,
+  }
+}
+
+/**
+ * Search ASKAP observations by project
+ */
+export async function searchASKAPByProject(
+  projectCode: string
+): Promise<ApiResponse<Observation[]>> {
+  const query = `
+    SELECT TOP 100
+      obs_id, target_name, s_ra, s_dec, t_min, t_exptime,
+      instrument_name, obs_collection, access_url, project_code
+    FROM ivoa.ObsCore
+    WHERE obs_collection = 'ASKAP'
+      AND project_code LIKE '%${projectCode}%'
+    ORDER BY t_min DESC
+  `
+
+  const result = await queryCASDATAP(query)
+
+  if (!result.success) {
+    return result as unknown as ApiResponse<Observation[]>
+  }
+
+  const observations = (result.data || []).map((row) => transformCASDATOObservation(row as unknown as CASDACatalogEntry))
+
+  return {
+    success: true,
+    data: observations,
+  }
+}
+
+/**
+ * Get recent ASKAP observations
+ */
+export async function getRecentASKAPObservations(
+  limit: number = 50
+): Promise<ApiResponse<Observation[]>> {
+  const query = `
+    SELECT TOP ${limit}
+      obs_id, target_name, s_ra, s_dec, t_min, t_exptime,
+      instrument_name, obs_collection, access_url, project_code
+    FROM ivoa.ObsCore
+    WHERE obs_collection = 'ASKAP'
+      AND dataproduct_type = 'cube'
+    ORDER BY t_min DESC
+  `
+
+  const result = await queryCASDATAP(query)
+
+  if (!result.success) {
+    return result as unknown as ApiResponse<Observation[]>
+  }
+
+  const observations = (result.data || []).map((row) => transformCASDATOObservation(row as unknown as CASDACatalogEntry))
+
+  return {
+    success: true,
+    data: observations,
+  }
+}
+
+// ============================================
+// Transform Functions
+// ============================================
+
+function transformCASDATOObservation(entry: CASDACatalogEntry): Observation {
+  return {
+    id: entry.obs_id,
+    source: 'ASKAP',
+    targetName: entry.target_name || 'Unknown Target',
+    coordinates: {
+      ra: entry.s_ra,
+      dec: entry.s_dec,
+      equinox: 'J2000',
+    },
+    category: 'other', // Would need more info to categorize
+    wavelengthBand: 'radio',
+    instrument: undefined, // Radio telescope - not a JWST instrument
+    observationDate: entry.t_min ? new Date(entry.t_min * 86400000 + Date.UTC(1858, 10, 17)).toISOString() : new Date().toISOString(),
+    exposureTime: entry.t_exptime,
+    proposalId: entry.project_code,
+    images: {
+      thumbnail: entry.thumbnail_url || RADIO_PLACEHOLDER_IMAGES.generic,
+      preview: entry.thumbnail_url || RADIO_PLACEHOLDER_IMAGES.generic,
+      full: entry.access_url || '',
+    },
+    externalLinks: [
+      {
+        label: 'View on CASDA',
+        url: `https://casda.csiro.au/casda_vo_tools/observations/${entry.obs_id}`,
+        type: 'other',
+      },
+    ],
+  }
+}
+
+// ============================================
+// SKA Information & Simulations
+// ============================================
+
+/**
+ * Get information about SKA science goals
+ */
+export function getSKAScienceGoals() {
+  return [
+    {
+      id: 'dark-energy',
+      title: 'Dark Energy & Dark Matter',
+      description: 'Mapping the distribution of hydrogen across the universe to understand cosmic acceleration.',
+      icon: '🌌',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'Precise measurements of the expansion history of the universe',
+    },
+    {
+      id: 'cosmic-magnetism',
+      title: 'Cosmic Magnetism',
+      description: 'Understanding the origin and evolution of magnetic fields in the universe.',
+      icon: '🧲',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'First detailed maps of intergalactic magnetic fields',
+    },
+    {
+      id: 'pulsars',
+      title: 'Gravity & Pulsars',
+      description: 'Using pulsars as natural gravitational wave detectors and to test general relativity.',
+      icon: '💫',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'Detection of gravitational waves from supermassive black hole mergers',
+    },
+    {
+      id: 'epoch-reionization',
+      title: 'Cosmic Dawn & Epoch of Reionization',
+      description: 'Observing the first stars and galaxies that lit up the universe.',
+      icon: '🌅',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'Direct observation of the first billion years of cosmic history',
+    },
+    {
+      id: 'seti',
+      title: 'Search for Extraterrestrial Intelligence',
+      description: 'The most comprehensive search for technosignatures in history.',
+      icon: '👽',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'Survey of millions of star systems for artificial signals',
+    },
+    {
+      id: 'transients',
+      title: 'Transient Radio Sky',
+      description: 'Monitoring the sky for fast radio bursts, supernovae, and other explosive events.',
+      icon: '💥',
+      wavelengthBand: 'radio' as const,
+      expectedResults: 'Real-time detection and localization of cosmic explosions',
+    },
+  ]
+}
+
+/**
+ * Get SKA construction timeline
+ */
+export function getSKATimeline() {
+  return [
+    { year: 2012, event: 'Site selection - Australia and South Africa chosen', status: 'completed' },
+    { year: 2018, event: 'SKA Observatory established', status: 'completed' },
+    { year: 2021, event: 'Construction approved', status: 'completed' },
+    { year: 2022, event: 'Construction begins', status: 'completed' },
+    { year: 2024, event: 'First antennas deployed at SKA-Low (Australia)', status: 'in-progress' },
+    { year: 2027, event: 'Expected first light observations', status: 'upcoming' },
+    { year: 2028, event: 'Early science operations begin', status: 'upcoming' },
+    { year: 2030, event: 'Full array completion', status: 'upcoming' },
+  ]
+}
+
+/**
+ * Compare SKA to current telescopes
+ */
+export function getSKAComparison() {
+  return {
+    sensitivity: {
+      current: 'Current largest radio telescopes',
+      ska: '50x more sensitive',
+      description: 'SKA will be able to detect signals 50 times fainter than current telescopes',
+    },
+    surveySpeed: {
+      current: 'Years to survey the sky',
+      ska: 'Days to weeks',
+      description: 'SKA will survey the entire sky millions of times faster',
+    },
+    resolution: {
+      current: 'Arcsecond resolution',
+      ska: 'Milliarcsecond resolution',
+      description: 'Able to see details 50 times smaller',
+    },
+    dataRate: {
+      current: 'Gigabytes per second',
+      ska: '710 petabytes per day (raw)',
+      description: 'More data than the entire internet traffic combined',
+    },
+    baselines: {
+      current: 'Hundreds of kilometers',
+      ska: 'Up to 3,000 km',
+      description: 'Creates a virtual telescope thousands of kilometers wide',
+    },
+  }
+}
+
+// ============================================
+// Featured Australian Radio Observations
+// ============================================
+
+export function getFeaturedRadioObservations(): Observation[] {
+  return [
+    // ASKAP Observations
+    {
+      id: 'askap-emu-pilot',
+      source: 'ASKAP',
+      targetName: 'EMU Pilot Survey Region',
+      aliases: ['Evolutionary Map of the Universe Pilot'],
+      coordinates: { ra: 0, dec: -27, equinox: 'J2000' },
+      category: 'deep-field',
+      wavelengthBand: 'radio',
+      observationDate: '2021-01-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.herculesA,
+        preview: NASA_RADIO_IMAGES.herculesA,
+        full: NASA_RADIO_IMAGES.herculesA,
+      },
+      description: 'Radio continuum survey revealing millions of galaxies across the southern sky.',
+      isFeatured: true,
+      analysis: {
+        summary: 'ASKAP\'s EMU survey will catalogue approximately 70 million galaxies at radio wavelengths.',
+        scientificContext: 'This survey is a pathfinder for SKA continuum science, demonstrating the power of wide-field radio imaging.',
+        keyFeatures: ['Radio galaxies', 'Active galactic nuclei', 'Star-forming galaxies'],
+        relatedObjects: ['Radio galaxy population'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+      externalLinks: [
+        { label: 'EMU Project', url: 'https://www.atnf.csiro.au/people/Ray.Norris/emu/', type: 'other' },
+      ],
+    },
+    {
+      id: 'askap-wallaby-survey',
+      source: 'ASKAP',
+      targetName: 'WALLABY HI Survey - NGC 5044 Group',
+      aliases: ['WALLABY', 'Widefield ASKAP L-band Legacy All-sky Blind surveY'],
+      coordinates: { ra: 198.85, dec: -16.39, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2022-03-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.galaxyCluster,
+        preview: NASA_RADIO_IMAGES.galaxyCluster,
+        full: NASA_RADIO_IMAGES.galaxyCluster,
+      },
+      description: 'Mapping neutral hydrogen in galaxies to understand galaxy evolution and the cosmic web.',
+      isFeatured: true,
+      analysis: {
+        summary: 'WALLABY will detect over 500,000 galaxies in neutral hydrogen emission.',
+        scientificContext: 'Neutral hydrogen (HI) traces the fuel for star formation and is sensitive to galaxy interactions.',
+        keyFeatures: ['HI 21cm emission', 'Galaxy dynamics', 'Dark matter content', 'Tidal interactions'],
+        relatedObjects: ['NGC 5044 Group', 'Galaxy groups'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+      externalLinks: [
+        { label: 'WALLABY Project', url: 'https://wallaby-survey.org/', type: 'other' },
+      ],
+    },
+    {
+      id: 'askap-vast-transient',
+      source: 'ASKAP',
+      targetName: 'VAST Transient Discovery',
+      aliases: ['Variables and Slow Transients'],
+      coordinates: { ra: 325.92, dec: -45.67, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2023-08-20T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.blackHoleJets,
+        preview: NASA_RADIO_IMAGES.blackHoleJets,
+        full: NASA_RADIO_IMAGES.blackHoleJets,
+      },
+      description: 'Discovering variable and transient radio sources across the southern sky.',
+      isFeatured: true,
+      analysis: {
+        summary: 'VAST surveys the sky repeatedly to find objects that vary or appear suddenly.',
+        scientificContext: 'Radio transients include supernovae, neutron star mergers, and mysterious new phenomena.',
+        keyFeatures: ['Radio variability', 'Multi-epoch imaging', 'Transient alerts', 'Counterpart identification'],
+        relatedObjects: ['Radio supernovae', 'Gamma-ray bursts'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'askap-odd-radio-circles',
+      source: 'ASKAP',
+      targetName: 'Odd Radio Circles (ORCs)',
+      aliases: ['ORC1', 'ASKAP J210857.7-510851'],
+      coordinates: { ra: 317.24, dec: -51.15, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2020-09-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.bentJets,
+        preview: NASA_RADIO_IMAGES.bentJets,
+        full: NASA_RADIO_IMAGES.bentJets,
+      },
+      description: 'A mysterious new class of circular radio objects discovered by ASKAP.',
+      isFeatured: true,
+      analysis: {
+        summary: 'ORCs are giant rings of radio emission surrounding distant galaxies - a completely new phenomenon.',
+        scientificContext: 'First discovered in 2020, ORCs may be shockwaves from galactic merger events or massive starbursts.',
+        keyFeatures: ['Circular morphology', 'Central galaxy', 'No optical counterpart', 'Possible shockwave origin'],
+        relatedObjects: ['Radio relics', 'Galaxy mergers'],
+        funFacts: ['The rings are about 1 million light-years across', 'Only a handful have been discovered so far'],
+        confidence: 'medium',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // Parkes Observations
+    {
+      id: 'parkes-fast-radio-burst',
+      source: 'Parkes',
+      targetName: 'FRB 010724 (Lorimer Burst)',
+      aliases: ['The Lorimer Burst', 'First FRB'],
+      coordinates: { ra: 1.4, dec: -73.5, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2001-07-24T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.fastRadioBurst,
+        preview: NASA_RADIO_IMAGES.fastRadioBurst,
+        full: NASA_RADIO_IMAGES.fastRadioBurst,
+      },
+      description: 'The first fast radio burst ever discovered - a mysterious millisecond flash of radio waves.',
+      isFeatured: true,
+      analysis: {
+        summary: 'The discovery that launched an entirely new field of astrophysics.',
+        scientificContext: 'Fast radio bursts are intense millisecond pulses of radio waves from distant galaxies. Their origin is still being investigated.',
+        keyFeatures: ['Millisecond duration', 'High dispersion measure', 'Extragalactic origin'],
+        relatedObjects: ['Magnetars', 'Neutron stars'],
+        funFacts: ['In that millisecond, the burst released as much energy as the Sun does in 3 days'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-pulsar-timing',
+      source: 'Parkes',
+      targetName: 'Pulsar Timing Array - J0437-4715',
+      aliases: ['PSR J0437-4715', 'Millisecond Pulsar'],
+      coordinates: { ra: 69.32, dec: -47.25, equinox: 'J2000' },
+      category: 'pulsar',
+      wavelengthBand: 'radio',
+      observationDate: '2023-01-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.pulsarArtist,
+        preview: NASA_RADIO_IMAGES.pulsarArtist,
+        full: NASA_RADIO_IMAGES.pulsarArtist,
+      },
+      description: 'Precision timing of millisecond pulsars to detect gravitational waves.',
+      isFeatured: true,
+      analysis: {
+        summary: 'The closest and brightest millisecond pulsar, a cornerstone of gravitational wave detection.',
+        scientificContext: 'Pulsar timing arrays use stable millisecond pulsars as cosmic clocks to detect low-frequency gravitational waves from supermassive black hole binaries.',
+        keyFeatures: ['173 Hz rotation', 'Nanosecond timing precision', 'Binary system', 'Gravitational wave detection'],
+        relatedObjects: ['NANOGrav', 'EPTA', 'PPTA'],
+        funFacts: ['Rotates 173 times per second', 'Only 510 light-years away'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-magellanic-survey',
+      source: 'Parkes',
+      targetName: 'Large Magellanic Cloud HI Survey',
+      aliases: ['LMC', 'Parkes Multibeam HI Survey'],
+      coordinates: { ra: 80.89, dec: -69.76, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2003-06-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.smc,
+        preview: NASA_RADIO_IMAGES.smc,
+        full: NASA_RADIO_IMAGES.smc,
+      },
+      description: 'Detailed mapping of neutral hydrogen in our nearest galactic neighbour.',
+      isFeatured: true,
+      analysis: {
+        summary: 'High-resolution map of the hydrogen gas in the Large Magellanic Cloud.',
+        scientificContext: 'The LMC is a satellite galaxy of the Milky Way and a testbed for understanding star formation and galaxy evolution.',
+        keyFeatures: ['HI distribution', 'Magellanic Stream', 'Star formation regions', 'Galaxy interaction'],
+        relatedObjects: ['Small Magellanic Cloud', 'Milky Way'],
+        funFacts: ['The LMC is visible to the naked eye from the southern hemisphere', 'Contains the Tarantula Nebula'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // MWA Observations
+    {
+      id: 'mwa-eor',
+      source: 'MWA',
+      targetName: 'Epoch of Reionization Field',
+      coordinates: { ra: 0, dec: -27, equinox: 'J2000' },
+      category: 'deep-field',
+      wavelengthBand: 'radio',
+      observationDate: '2023-06-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.galacticCenter,
+        preview: NASA_RADIO_IMAGES.galacticCenter,
+        full: NASA_RADIO_IMAGES.galacticCenter,
+      },
+      description: 'Searching for the faint signal of neutral hydrogen from the cosmic dawn.',
+      isFeatured: true,
+      analysis: {
+        summary: 'MWA observations searching for the 21cm signal from the first billion years of the universe.',
+        scientificContext: 'During the Epoch of Reionization, the first stars and galaxies ionized the neutral hydrogen filling the universe. MWA seeks to detect this transition.',
+        keyFeatures: ['21cm hydrogen line', 'Redshifted signal', 'Foreground subtraction'],
+        relatedObjects: ['First galaxies', 'Cosmic dawn'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'mwa-gleam-survey',
+      source: 'MWA',
+      targetName: 'GLEAM All-Sky Survey',
+      aliases: ['GaLactic and Extragalactic All-sky MWA Survey'],
+      coordinates: { ra: 180.0, dec: -30.0, equinox: 'J2000' },
+      category: 'deep-field',
+      wavelengthBand: 'radio',
+      observationDate: '2018-01-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.andromeda,
+        preview: NASA_RADIO_IMAGES.andromeda,
+        full: NASA_RADIO_IMAGES.andromeda,
+      },
+      description: 'The most detailed low-frequency radio map of the southern sky ever created.',
+      isFeatured: true,
+      analysis: {
+        summary: 'GLEAM cataloged over 300,000 radio sources at frequencies between 72 and 231 MHz.',
+        scientificContext: 'Low-frequency radio observations reveal steep-spectrum sources, relic radio galaxies, and diffuse emission invisible at higher frequencies.',
+        keyFeatures: ['Multi-frequency imaging', 'Spectral indices', 'Diffuse emission', 'Radio galaxy census'],
+        relatedObjects: ['Radio galaxies', 'Galaxy clusters'],
+        funFacts: ['Created from over 45,000 images', 'Covers 80% of the sky'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+      externalLinks: [
+        { label: 'GLEAM Survey', url: 'https://www.mwatelescope.org/gleam', type: 'other' },
+      ],
+    },
+    {
+      id: 'mwa-solar-observation',
+      source: 'MWA',
+      targetName: 'Solar Radio Bursts',
+      aliases: ['MWA Solar', 'Space Weather Monitoring'],
+      coordinates: { ra: 0, dec: 0, equinox: 'J2000' },
+      category: 'solar-system',
+      wavelengthBand: 'radio',
+      observationDate: '2024-03-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.triangulum,
+        preview: NASA_RADIO_IMAGES.triangulum,
+        full: NASA_RADIO_IMAGES.triangulum,
+      },
+      description: 'Monitoring solar radio bursts to understand space weather and protect Earth.',
+      isFeatured: true,
+      analysis: {
+        summary: 'MWA provides real-time monitoring of solar radio emissions for space weather prediction.',
+        scientificContext: 'Solar radio bursts are associated with coronal mass ejections and solar flares that can affect satellites and power grids on Earth.',
+        keyFeatures: ['Type II/III bursts', 'Coronal mass ejections', 'Space weather alerts', 'Real-time imaging'],
+        relatedObjects: ['Sun', 'Solar corona'],
+        funFacts: ['MWA can image the Sun every 0.5 seconds', 'Helps protect astronauts and satellites'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // Additional ASKAP Observations
+    {
+      id: 'askap-fornax-cluster',
+      source: 'ASKAP',
+      targetName: 'Fornax Galaxy Cluster',
+      aliases: ['Abell S373'],
+      coordinates: { ra: 54.62, dec: -35.45, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2022-11-10T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.galaxyCluster,
+        preview: NASA_RADIO_IMAGES.galaxyCluster,
+        full: NASA_RADIO_IMAGES.galaxyCluster,
+      },
+      description: 'Deep radio imaging of the nearest galaxy cluster in the southern hemisphere.',
+      analysis: {
+        summary: 'ASKAP reveals the radio structure of galaxies within the Fornax Cluster.',
+        scientificContext: 'Galaxy clusters are the largest gravitationally bound structures in the universe. Radio observations reveal interactions and AGN activity.',
+        keyFeatures: ['Galaxy interactions', 'Ram pressure stripping', 'AGN jets', 'Cluster dynamics'],
+        relatedObjects: ['NGC 1399', 'NGC 1365', 'NGC 1316 (Fornax A)'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'askap-centaurus-a',
+      source: 'ASKAP',
+      targetName: 'Centaurus A Radio Lobes',
+      aliases: ['NGC 5128', 'Cen A'],
+      coordinates: { ra: 201.37, dec: -43.02, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2021-06-20T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.centaurusA,
+        preview: NASA_RADIO_IMAGES.centaurusA,
+        full: NASA_RADIO_IMAGES.centaurusA,
+      },
+      description: 'Wide-field imaging of the enormous radio lobes from the nearest radio galaxy.',
+      analysis: {
+        summary: 'ASKAP\'s wide field of view captures the full extent of Centaurus A\'s radio emission.',
+        scientificContext: 'Centaurus A is the closest active galaxy and its radio lobes span 8 degrees on the sky - 16 times the apparent size of the full Moon.',
+        keyFeatures: ['Radio jets', 'Giant lobes', 'AGN feedback', 'Relativistic particles'],
+        relatedObjects: ['Supermassive black hole', 'Active galactic nucleus'],
+        funFacts: ['The radio lobes extend nearly 1 million light-years from the galaxy', 'Only 12 million light-years away'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'askap-smc-survey',
+      source: 'ASKAP',
+      targetName: 'Small Magellanic Cloud Survey',
+      aliases: ['SMC', 'NGC 292'],
+      coordinates: { ra: 13.18, dec: -72.83, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2023-02-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.smc,
+        preview: NASA_RADIO_IMAGES.smc,
+        full: NASA_RADIO_IMAGES.smc,
+      },
+      description: 'High-resolution radio continuum survey of the Small Magellanic Cloud.',
+      analysis: {
+        summary: 'ASKAP reveals supernova remnants, HII regions, and planetary nebulae in our galactic neighbour.',
+        scientificContext: 'The SMC is an irregular dwarf galaxy interacting with the Milky Way and LMC.',
+        keyFeatures: ['Supernova remnants', 'Star formation', 'Planetary nebulae', 'Background AGN'],
+        relatedObjects: ['LMC', 'Magellanic Bridge', 'Magellanic Stream'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'askap-galactic-center',
+      source: 'ASKAP',
+      targetName: 'Galactic Center Radio Survey',
+      aliases: ['Sagittarius A region', 'Milky Way Center'],
+      coordinates: { ra: 266.42, dec: -29.01, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2022-07-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.galacticCenter,
+        preview: NASA_RADIO_IMAGES.galacticCenter,
+        full: NASA_RADIO_IMAGES.galacticCenter,
+      },
+      description: 'Wideband radio imaging of the chaotic center of our Milky Way galaxy.',
+      analysis: {
+        summary: 'ASKAP captures the complex radio emission from the heart of our galaxy.',
+        scientificContext: 'The Galactic Center hosts Sagittarius A*, our supermassive black hole, along with intense star formation and mysterious radio filaments.',
+        keyFeatures: ['Sagittarius A*', 'Radio filaments', 'Supernova remnants', 'Molecular clouds'],
+        relatedObjects: ['Sagittarius A*', 'Sgr B2', 'The Radio Arc'],
+        funFacts: ['The black hole at the center is 4 million times the mass of the Sun'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'askap-sculptor-galaxy',
+      source: 'ASKAP',
+      targetName: 'NGC 253 - Sculptor Galaxy',
+      aliases: ['Silver Dollar Galaxy', 'Silver Coin Galaxy'],
+      coordinates: { ra: 11.89, dec: -25.29, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2021-09-10T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.m106Radio,
+        preview: NASA_RADIO_IMAGES.m106Radio,
+        full: NASA_RADIO_IMAGES.m106Radio,
+      },
+      description: 'Radio observations of one of the brightest starburst galaxies in the sky.',
+      analysis: {
+        summary: 'ASKAP reveals the intense star formation and nuclear outflow in NGC 253.',
+        scientificContext: 'NGC 253 is forming stars 10 times faster than the Milky Way, driving powerful galactic winds.',
+        keyFeatures: ['Starburst nucleus', 'Galactic winds', 'Supernova remnants', 'Molecular gas'],
+        relatedObjects: ['Sculptor Group', 'NGC 247'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // Additional Parkes Observations
+    {
+      id: 'parkes-galactic-allsky',
+      source: 'Parkes',
+      targetName: 'Galactic All-Sky Survey (GASS)',
+      aliases: ['GASS', 'HI4PI'],
+      coordinates: { ra: 180.0, dec: 0.0, equinox: 'J2000' },
+      category: 'deep-field',
+      wavelengthBand: 'radio',
+      observationDate: '2009-01-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.andromeda,
+        preview: NASA_RADIO_IMAGES.andromeda,
+        full: NASA_RADIO_IMAGES.andromeda,
+      },
+      description: 'Complete survey of neutral hydrogen across the southern Milky Way.',
+      analysis: {
+        summary: 'GASS provides the most detailed view of hydrogen gas in our galaxy.',
+        scientificContext: 'Combined with northern surveys to create HI4PI, the most complete map of galactic hydrogen ever made.',
+        keyFeatures: ['21cm emission', 'Galactic structure', 'High-velocity clouds', 'Magellanic System'],
+        relatedObjects: ['Milky Way', 'High-velocity clouds'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-vela-pulsar',
+      source: 'Parkes',
+      targetName: 'Vela Pulsar',
+      aliases: ['PSR B0833-45', 'PSR J0835-4510'],
+      coordinates: { ra: 128.84, dec: -45.18, equinox: 'J2000' },
+      category: 'pulsar',
+      wavelengthBand: 'radio',
+      observationDate: '2020-05-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.pulsarEclipse,
+        preview: NASA_RADIO_IMAGES.pulsarEclipse,
+        full: NASA_RADIO_IMAGES.pulsarEclipse,
+      },
+      description: 'The brightest persistent radio source in the sky, a young pulsar in a supernova remnant.',
+      analysis: {
+        summary: 'The Vela Pulsar is a neutron star spinning 11 times per second inside its supernova remnant.',
+        scientificContext: 'At only 11,000 years old, Vela is one of the youngest known pulsars and shows frequent "glitches" in its rotation.',
+        keyFeatures: ['11 Hz rotation', 'Glitching behavior', 'Supernova remnant', 'Pulsar wind nebula'],
+        relatedObjects: ['Vela Supernova Remnant', 'Vela X'],
+        funFacts: ['The supernova that created this pulsar was visible from Earth 11,000 years ago'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-crab-pulsar',
+      source: 'Parkes',
+      targetName: 'Crab Pulsar',
+      aliases: ['PSR B0531+21', 'PSR J0534+2200'],
+      coordinates: { ra: 83.63, dec: 22.01, equinox: 'J2000' },
+      category: 'pulsar',
+      wavelengthBand: 'radio',
+      observationDate: '2019-11-20T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.crabNebula,
+        preview: NASA_RADIO_IMAGES.crabNebula,
+        full: NASA_RADIO_IMAGES.crabNebula,
+      },
+      description: 'The pulsar at the heart of the Crab Nebula, born in the supernova of 1054 AD.',
+      analysis: {
+        summary: 'A 33-millisecond pulsar powering the Crab Nebula with its relativistic wind.',
+        scientificContext: 'Chinese astronomers recorded the supernova in 1054 AD. The pulsar was discovered in 1968.',
+        keyFeatures: ['Giant pulses', 'Synchrotron radiation', 'Pulsar wind', 'Historical supernova'],
+        relatedObjects: ['Crab Nebula', 'SN 1054'],
+        funFacts: ['Spins 30 times per second', 'One of the most studied objects in astronomy'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-double-pulsar',
+      source: 'Parkes',
+      targetName: 'Double Pulsar System',
+      aliases: ['PSR J0737-3039', 'Double Pulsar'],
+      coordinates: { ra: 114.25, dec: -30.66, equinox: 'J2000' },
+      category: 'pulsar',
+      wavelengthBand: 'radio',
+      observationDate: '2022-04-10T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.pulsarArtist,
+        preview: NASA_RADIO_IMAGES.pulsarArtist,
+        full: NASA_RADIO_IMAGES.pulsarArtist,
+      },
+      description: 'The only known system where both neutron stars are visible as pulsars.',
+      analysis: {
+        summary: 'Discovered in 2003, this system provides the most precise tests of general relativity.',
+        scientificContext: 'Two pulsars orbiting each other every 2.4 hours, losing energy through gravitational wave emission.',
+        keyFeatures: ['Binary pulsars', 'Gravitational wave inspiral', 'Relativistic precession', 'Mass measurement'],
+        relatedObjects: ['Hulse-Taylor pulsar'],
+        funFacts: ['Will merge in 85 million years', 'Confirms Einstein\'s predictions to 99.95% accuracy'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'parkes-repeating-frb',
+      source: 'Parkes',
+      targetName: 'Repeating Fast Radio Burst',
+      aliases: ['FRB 171019', 'Parkes FRB'],
+      coordinates: { ra: 335.59, dec: -11.95, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2017-10-19T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.fastRadioBurst,
+        preview: NASA_RADIO_IMAGES.fastRadioBurst,
+        full: NASA_RADIO_IMAGES.fastRadioBurst,
+      },
+      description: 'A fast radio burst that was later found to repeat, suggesting a non-cataclysmic origin.',
+      analysis: {
+        summary: 'Repeating FRBs challenge the theory that all bursts come from one-time explosive events.',
+        scientificContext: 'Magnetars (highly magnetized neutron stars) are now the leading candidate for repeating FRBs.',
+        keyFeatures: ['Repeat bursts', 'Millisecond duration', 'High dispersion', 'Magnetar origin'],
+        relatedObjects: ['FRB 121102', 'SGR 1935+2154'],
+        confidence: 'medium',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // Additional MWA Observations
+    {
+      id: 'mwa-ionosphere',
+      source: 'MWA',
+      targetName: 'Ionospheric Studies',
+      aliases: ['Space Weather', 'Ionosphere Monitoring'],
+      coordinates: { ra: 0, dec: -27, equinox: 'J2000' },
+      category: 'solar-system',
+      wavelengthBand: 'radio',
+      observationDate: '2023-09-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.galacticCenter,
+        preview: NASA_RADIO_IMAGES.galacticCenter,
+        full: NASA_RADIO_IMAGES.galacticCenter,
+      },
+      description: 'Using radio sources as probes to study Earth\'s ionosphere.',
+      analysis: {
+        summary: 'MWA observations reveal the structure and dynamics of Earth\'s upper atmosphere.',
+        scientificContext: 'The ionosphere affects radio communications and GPS accuracy. Understanding it helps predict space weather effects.',
+        keyFeatures: ['Ionospheric turbulence', 'TEC variations', 'GPS calibration', 'Space weather'],
+        relatedObjects: ['Earth', 'Solar wind'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'mwa-meteor-radar',
+      source: 'MWA',
+      targetName: 'Meteor Radar Detection',
+      aliases: ['MWA Meteor Mode'],
+      coordinates: { ra: 0, dec: -30, equinox: 'J2000' },
+      category: 'solar-system',
+      wavelengthBand: 'radio',
+      observationDate: '2024-01-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.triangulum,
+        preview: NASA_RADIO_IMAGES.triangulum,
+        full: NASA_RADIO_IMAGES.triangulum,
+      },
+      description: 'Detecting meteors through their radio reflections in the atmosphere.',
+      analysis: {
+        summary: 'MWA detects meteors by their ionization trails, even during daylight or cloudy conditions.',
+        scientificContext: 'Radio meteor detection provides data on meteor streams and space debris invisible to optical surveys.',
+        keyFeatures: ['Radio reflections', 'Ionization trails', 'All-weather detection', 'Orbital determination'],
+        relatedObjects: ['Meteor showers', 'Asteroid debris'],
+        funFacts: ['Detects meteors as small as grains of sand'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'mwa-pulsar-survey',
+      source: 'MWA',
+      targetName: 'Low-Frequency Pulsar Survey',
+      aliases: ['SMART Pulsar Survey'],
+      coordinates: { ra: 120.0, dec: -40.0, equinox: 'J2000' },
+      category: 'pulsar',
+      wavelengthBand: 'radio',
+      observationDate: '2022-06-01T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.pulsarArtist,
+        preview: NASA_RADIO_IMAGES.pulsarArtist,
+        full: NASA_RADIO_IMAGES.pulsarArtist,
+      },
+      description: 'Searching for pulsars at low radio frequencies where they are brightest.',
+      analysis: {
+        summary: 'MWA\'s low-frequency observations discover pulsars missed by higher-frequency surveys.',
+        scientificContext: 'Many pulsars have steep spectra, meaning they are brighter at low frequencies.',
+        keyFeatures: ['Steep spectrum pulsars', 'Wide field', 'Dispersion measure', 'Millisecond pulsars'],
+        relatedObjects: ['Galactic pulsar population'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'mwa-cygnus-a',
+      source: 'MWA',
+      targetName: 'Cygnus A at Low Frequencies',
+      aliases: ['3C 405', 'Cyg A'],
+      coordinates: { ra: 299.87, dec: 40.73, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2020-10-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.herculesA,
+        preview: NASA_RADIO_IMAGES.herculesA,
+        full: NASA_RADIO_IMAGES.herculesA,
+      },
+      description: 'Low-frequency view of one of the brightest radio sources in the sky.',
+      analysis: {
+        summary: 'MWA reveals the extended emission from this powerful radio galaxy.',
+        scientificContext: 'Cygnus A is 600 million light-years away but is one of the brightest radio sources due to its enormous radio lobes.',
+        keyFeatures: ['Radio lobes', 'FR II morphology', 'Hot spots', 'Jet-driven shocks'],
+        relatedObjects: ['Radio galaxies', 'Active galactic nuclei'],
+        funFacts: ['The radio lobes are 500,000 light-years across', 'Powered by a supermassive black hole'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    // ATCA Observations
+    {
+      id: 'atca-sn1987a',
+      source: 'ATCA',
+      targetName: 'Supernova 1987A',
+      aliases: ['SN 1987A', 'Sanduleak -69° 202'],
+      coordinates: { ra: 83.87, dec: -69.27, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2023-02-23T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.sn1987a,
+        preview: NASA_RADIO_IMAGES.sn1987a,
+        full: NASA_RADIO_IMAGES.sn1987a,
+      },
+      description: 'Long-term monitoring of the closest supernova in 400 years.',
+      analysis: {
+        summary: 'ATCA has monitored SN 1987A for over 30 years, watching the remnant evolve.',
+        scientificContext: 'The supernova shock is now interacting with material ejected by the progenitor star, brightening at radio wavelengths.',
+        keyFeatures: ['Supernova remnant', 'Shock interaction', 'Ring structure', 'Neutron star?'],
+        relatedObjects: ['Large Magellanic Cloud'],
+        funFacts: ['Visible to the naked eye when it exploded', 'First supernova where neutrinos were detected'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'atca-grb-followup',
+      source: 'ATCA',
+      targetName: 'GRB Afterglow Detection',
+      aliases: ['Gamma-Ray Burst Radio Afterglow'],
+      coordinates: { ra: 186.32, dec: -12.45, equinox: 'J2000' },
+      category: 'other',
+      wavelengthBand: 'radio',
+      observationDate: '2023-10-05T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.w49b,
+        preview: NASA_RADIO_IMAGES.w49b,
+        full: NASA_RADIO_IMAGES.w49b,
+      },
+      description: 'Rapid follow-up of gamma-ray burst afterglows at radio wavelengths.',
+      analysis: {
+        summary: 'ATCA detects the radio afterglow from the most energetic explosions in the universe.',
+        scientificContext: 'Gamma-ray bursts produce radio emission as their relativistic jets slow down in the surrounding medium.',
+        keyFeatures: ['Relativistic jets', 'Afterglow evolution', 'Energy measurement', 'Environment probing'],
+        relatedObjects: ['Neutron star mergers', 'Massive star collapse'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'atca-protoplanetary',
+      source: 'ATCA',
+      targetName: 'HL Tauri Protoplanetary Disk',
+      aliases: ['HL Tau'],
+      coordinates: { ra: 67.91, dec: 18.23, equinox: 'J2000' },
+      category: 'exoplanet',
+      wavelengthBand: 'radio',
+      observationDate: '2021-03-15T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.bentJets,
+        preview: NASA_RADIO_IMAGES.bentJets,
+        full: NASA_RADIO_IMAGES.bentJets,
+      },
+      description: 'High-resolution imaging of a planet-forming disk around a young star.',
+      analysis: {
+        summary: 'ATCA observations complement ALMA studies of this iconic protoplanetary disk.',
+        scientificContext: 'HL Tauri\'s disk shows gaps that may be carved by forming planets.',
+        keyFeatures: ['Protoplanetary disk', 'Gap structures', 'Dust emission', 'Planet formation'],
+        relatedObjects: ['T Tauri stars', 'Planet-forming disks'],
+        funFacts: ['The disk extends 100 AU from the star', 'Multiple planets may be forming'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'atca-starburst-ngc4945',
+      source: 'ATCA',
+      targetName: 'NGC 4945 Starburst',
+      aliases: ['Caldwell 83'],
+      coordinates: { ra: 196.36, dec: -49.47, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2020-07-20T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.m106Radio,
+        preview: NASA_RADIO_IMAGES.m106Radio,
+        full: NASA_RADIO_IMAGES.m106Radio,
+      },
+      description: 'Radio study of a nearby edge-on starburst galaxy with an active nucleus.',
+      analysis: {
+        summary: 'NGC 4945 hosts both intense star formation and a Seyfert 2 active nucleus.',
+        scientificContext: 'The edge-on orientation allows study of disk-halo interactions and galactic winds.',
+        keyFeatures: ['Starburst nucleus', 'AGN', 'Edge-on disk', 'Outflows'],
+        relatedObjects: ['Centaurus A Group'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      id: 'atca-circinus-galaxy',
+      source: 'ATCA',
+      targetName: 'Circinus Galaxy',
+      aliases: ['ESO 97-G13'],
+      coordinates: { ra: 213.29, dec: -65.34, equinox: 'J2000' },
+      category: 'galaxy',
+      wavelengthBand: 'radio',
+      observationDate: '2019-08-10T00:00:00Z',
+      images: {
+        thumbnail: NASA_RADIO_IMAGES.blackHoleJets,
+        preview: NASA_RADIO_IMAGES.blackHoleJets,
+        full: NASA_RADIO_IMAGES.blackHoleJets,
+      },
+      description: 'Radio imaging of the closest Seyfert 2 galaxy to Earth.',
+      analysis: {
+        summary: 'The Circinus Galaxy hosts an active supermassive black hole obscured by dust.',
+        scientificContext: 'At only 13 million light-years, Circinus provides a detailed look at AGN structure.',
+        keyFeatures: ['Seyfert 2 AGN', 'Water maser', 'Ionization cone', 'Radio jet'],
+        relatedObjects: ['Active galactic nuclei'],
+        funFacts: ['Hidden behind the Milky Way\'s plane', 'First extragalactic water maser discovered here'],
+        confidence: 'high',
+        generatedAt: new Date().toISOString(),
+      },
+    },
+  ]
+}

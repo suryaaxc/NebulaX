@@ -1,0 +1,290 @@
+'use client'
+
+/**
+ * Footer Component
+ * Site footer with links, credits, and accessibility info
+ */
+
+import Link from 'next/link'
+import { Github, ExternalLink, Accessibility, Heart, Briefcase } from 'lucide-react'
+
+// ============================================
+// Footer Links
+// ============================================
+
+const footerLinks = {
+  explore: [
+    { label: 'JWST Gallery', href: '/explore?source=JWST' },
+    { label: 'Australian Telescopes', href: '/explore?source=ASKAP' },
+    { label: 'Sky Map', href: '/sky-map' },
+    { label: 'Live Events', href: '/events' },
+  ],
+  interactive: [
+    { label: 'Observatory', href: '/observatory' },
+    { label: 'Solar System', href: '/solar-system' },
+    { label: 'Kepler Exoplanets', href: '/kepler' },
+  ],
+  learn: [
+    { label: 'About SKA', href: 'https://www.skao.int/', external: true },
+    { label: 'CSIRO Astronomy', href: 'https://www.csiro.au/en/about/facilities-collections/atnf', external: true },
+    { label: 'NASA JWST', href: 'https://webb.nasa.gov/', external: true },
+  ],
+  legal: [
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Use', href: '/terms' },
+    { label: 'Accessibility', href: '/accessibility' },
+  ],
+}
+
+const dataCredits = [
+  { name: 'STScI/MAST', url: 'https://mast.stsci.edu/' },
+  { name: 'NASA', url: 'https://www.nasa.gov/' },
+  { name: 'ESA', url: 'https://www.esa.int/' },
+  { name: 'CSIRO', url: 'https://www.csiro.au/' },
+]
+
+// ============================================
+// Footer Component
+// ============================================
+
+export function Footer() {
+  const currentYear = new Date().getFullYear()
+
+  return (
+    <footer className="bg-nebulax-depth border-t border-white/10" role="contentinfo">
+      {/* Main footer content */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
+          {/* Brand column */}
+          <div className="col-span-2 md:col-span-4 lg:col-span-1 mb-8 lg:mb-0">
+            <Link href="/" className="inline-flex items-center gap-2 mb-4">
+              <span className="text-xl font-display font-bold text-gradient-stellar">
+                NebulaX
+              </span>
+              <span className="text-xl font-display font-light text-white">
+                Collective
+              </span>
+            </Link>
+            <p className="text-sm text-gray-400 mb-4">
+              Exploring the universe together through multi-wavelength astronomy
+              and interactive visualisations.
+            </p>
+            <div className="flex gap-3">
+              <a
+                href="https://github.com/nikhilsundriya"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="GitHub (opens in new tab)"
+              >
+                <Github className="w-5 h-5" />
+              </a>
+              <a
+                href="https://ko-fi.com/nikhilsundriya"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-gray-400 hover:text-nebulax-hydrogen hover:bg-nebulax-hydrogen/10 transition-colors"
+                aria-label="Support on Ko-fi (opens in new tab)"
+              >
+                <Heart className="w-5 h-5" />
+              </a>
+            </div>
+          </div>
+
+          {/* Link columns */}
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-4">Explore</h3>
+            <ul className="space-y-2">
+              {footerLinks.explore.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-4">Interactive</h3>
+            <ul className="space-y-2">
+              {footerLinks.interactive.map((link) => (
+                <li key={link.href}>
+                  {'external' in link && link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      {link.label}
+                      <ExternalLink className="w-3 h-3" />
+                      <span className="sr-only">(opens in new tab)</span>
+                    </a>
+                  ) : (
+                    <Link
+                      href={link.href}
+                      className="text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-4">Learn</h3>
+            <ul className="space-y-2">
+              {footerLinks.learn.map((link) => (
+                <li key={link.href}>
+                  {'external' in link && link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      {link.label}
+                      <ExternalLink className="w-3 h-3" />
+                      <span className="sr-only">(opens in new tab)</span>
+                    </a>
+                  ) : (
+                    <Link
+                      href={link.href}
+                      className="text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-4">Legal</h3>
+            <ul className="space-y-2">
+              {footerLinks.legal.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Data credits */}
+      <div className="border-t border-white/5">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-gray-500">
+            <span>Data provided by:</span>
+            {dataCredits.map((credit, index) => (
+              <span key={credit.name}>
+                <a
+                  href={credit.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-gray-300 transition-colors"
+                >
+                  {credit.name}
+                  <span className="sr-only">(opens in new tab)</span>
+                </a>
+                {index < dataCredits.length - 1 && <span className="ml-4">•</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Verified quality scores */}
+      <div className="border-t border-white/5 px-4 md:px-6 lg:px-8 py-6">
+        <div className="max-w-7xl mx-auto">
+          <p className="mb-4 text-xs font-medium uppercase tracking-widest text-gray-600 text-center">
+            Independently verified - click to audit live
+          </p>
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
+            {[
+              { score: '100', label: 'Accessibility', sub: 'Lighthouse', href: 'https://pagespeed.web.dev/analysis?url=https://nebulax-collective.com.au&form_factor=mobile&category=accessibility' },
+              { score: '100', label: 'Best Practices', sub: 'Lighthouse', href: 'https://pagespeed.web.dev/analysis?url=https://nebulax-collective.com.au&form_factor=mobile&category=best-practices' },
+              { score: '100', label: 'SEO', sub: 'Lighthouse', href: 'https://pagespeed.web.dev/analysis?url=https://nebulax-collective.com.au&form_factor=mobile&category=seo' },
+              { score: 'A+', label: 'Security', sub: 'Observatory', href: 'https://developer.mozilla.org/en-US/observatory/analyze?host=nebulax-collective.com.au' },
+              { score: 'A+', label: 'SSL/TLS', sub: 'SSL Labs', href: 'https://www.ssllabs.com/ssltest/analyze.html?d=nebulax-collective.com.au' },
+              { score: '0', label: 'Vulnerabilities', sub: 'Browser JS', href: 'https://github.com/nikhilsundriya/nebulax-collective-v2' },
+            ].map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group text-center py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <div className="font-mono text-2xl font-semibold text-nebulax-gold">
+                  {item.score}
+                </div>
+                <div className="mt-0.5 text-xs font-medium text-gray-300">{item.label}</div>
+                <div className="text-xs text-gray-600">{item.sub}</div>
+                <span className="sr-only"> (opens in new tab)</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom bar */}
+      <div className="border-t border-white/5 bg-nebulax-void/50">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-2">
+              <span>© {currentYear} NebulaX</span>
+              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">
+                Built by{' '}
+                <a
+                  href="https://github.com/nikhilsundriya"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  nikhilsundriya
+                  <span className="sr-only">(opens in new tab)</span>
+                </a>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <a
+                href="https://github.com/nikhilsundriya"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-nebulax-gold/10 hover:text-nebulax-gold transition-colors"
+              >
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>Available for hire</span>
+                <span className="sr-only">(opens in new tab)</span>
+              </a>
+              <span className="hidden sm:inline">•</span>
+              <Link
+                href="/accessibility"
+                className="inline-flex items-center gap-1 hover:text-gray-300 transition-colors"
+              >
+                <Accessibility className="w-4 h-4" />
+                <span className="hidden sm:inline">Accessibility</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}

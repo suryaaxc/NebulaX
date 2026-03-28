@@ -1,0 +1,168 @@
+/**
+ * Image Proxy API
+ * Proxies NASA and other external images through our server
+ * Provides retry logic, caching, and fallback handling
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { imageProxyLimiter, getClientIdentifier } from '@/lib/rate-limit'
+
+// Placeholder image (1x1 cosmic gradient)
+const PLACEHOLDER_IMAGE = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN88/7jfwAJbQPbFQ5R2AAAAABJRU5ErkJggg==',
+  'base64'
+)
+
+const ALLOWED_DOMAINS = [
+  'images-assets.nasa.gov',
+  'images-api.nasa.gov',
+  'www.nasa.gov',
+  'apod.nasa.gov',
+  'mast.stsci.edu',
+  'casda.csiro.au',
+]
+
+// Check if domain is allowed
+function isAllowedDomain(url: string): boolean {
+  try {
+    const urlObj = new URL(url)
+    return ALLOWED_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain))
+  } catch {
+    return false
+  }
+}
+
+// Fetch with retry logic
+async function fetchWithRetry(
+  url: string,
+  maxRetries = 2,
+  timeout = 10000
+): Promise<Response> {
+  let lastError: Error | null = null
+
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'NebulaX-Collective/2.0 (Educational Platform)',
+          'Accept': 'image/*',
+        },
+        // Cache for 24 hours
+        next: { revalidate: 86400 },
+      })
+
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        return response
+      }
+
+      // Don't retry on 404
+      if (response.status === 404) {
+        throw new Error(`Image not found: ${response.status}`)
+      }
+
+    } catch (error) {
+      lastError = error as Error
+
+      // Don't retry on abort (timeout)
+      if (lastError.name === 'AbortError' && i < maxRetries) {
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000))
+        continue
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch image')
+}
+
+export async function GET(request: NextRequest) {
+  // Rate limiting
+  const clientId = getClientIdentifier(request)
+  const allowed = await imageProxyLimiter.check(clientId)
+  if (!allowed) {
+    return new NextResponse(PLACEHOLDER_IMAGE, {
+      status: 429,
+      headers: {
+        'Content-Type': 'image/png',
+        'Retry-After': '60',
+      },
+    })
+  }
+
+  try {
+    const { searchParams } = new URL(request.url)
+    const imageUrl = searchParams.get('url')
+    const _width = searchParams.get('w') // Reserved for future image resizing
+
+    if (!imageUrl) {
+      return new NextResponse('Missing url parameter', { status: 400 })
+    }
+
+    // Decode URL
+    const decodedUrl = decodeURIComponent(imageUrl)
+
+    // Security: Check if domain is allowed
+    if (!isAllowedDomain(decodedUrl)) {
+      return new NextResponse('Domain not allowed', { status: 403 })
+    }
+
+    // Check if client sent ETag for conditional request
+    const clientETag = request.headers.get('if-none-match')
+
+    // Fetch image with retry logic — use longer timeout for large images
+    const isLargeImage = decodedUrl.includes('~large.jpg')
+    const response = await fetchWithRetry(decodedUrl, 2, isLargeImage ? 20000 : 10000)
+
+    // Get image data
+    const imageBuffer = await response.arrayBuffer()
+    const contentType = response.headers.get('content-type') || 'image/jpeg'
+
+    // Generate ETag from URL (stable across requests for same image)
+    const etag = `W/"${Buffer.from(decodedUrl).toString('base64').substring(0, 27)}"`
+
+    // Return 304 if ETag matches (image hasn't changed)
+    if (clientETag === etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000',
+        },
+      })
+    }
+
+    // Return proxied image with aggressive caching headers
+    return new NextResponse(imageBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000, immutable',
+        'CDN-Cache-Control': 'public, max-age=604800',
+        'Vercel-CDN-Cache-Control': 'public, max-age=604800',
+        'ETag': etag,
+        'X-Proxied-From': new URL(decodedUrl).hostname,
+      },
+    })
+
+  } catch (error) {
+    console.error('Image proxy error:', error)
+
+    // Return placeholder image on error
+    return new NextResponse(PLACEHOLDER_IMAGE, {
+      status: 200, // Return 200 so Next.js Image doesn't retry
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=3600',
+        'X-Proxy-Error': 'true',
+      },
+    })
+  }
+}
+
+// Node.js runtime required (Buffer usage for ETag + placeholder)
