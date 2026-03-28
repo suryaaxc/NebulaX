@@ -1,0 +1,33 @@
+# NebulaX - Robots.txt
+# https://nebulax-collective.com.au
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Disallow: /offline
+
+# Sitemap location
+Sitemap: https://nebulax-collective.com.au/sitemap.xml
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
+
+# Block AI training bots (optional - remove if you want AI indexing)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
