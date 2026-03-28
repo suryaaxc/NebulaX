@@ -1,6 +1,4 @@
-# NebulaX
-
-**[nebulax-collective.com.au](https://nebulax-collective.com.au)**
+**[NebulaX Collective](https://nebulax-nikhil.vercel.app)**
 
 > A Multi-Spectrum Astronomical Data Exploration Platform
 
@@ -11,8 +9,6 @@
 [![Website](https://img.shields.io/badge/Website-nebulax--collective.com.au-06b6d4?style=flat-square&logo=vercel)](https://nebulax-collective.com.au)
 
 NebulaX is an interactive platform for exploring the universe through multiple wavelengths of light. Fly through a 3D solar system, browse JWST's infrared imagery with wavelength switching, map 2,600+ Kepler exoplanets, and explore the sky with real-time data from 11 space agencies.
-
-![NebulaX - Interactive Solar System](./public/images/solar-system-demo-optimized.gif)
 
 ## Landing Page
 
@@ -126,8 +122,8 @@ nebulax-collective-v2/
 
 ```bash
 # Clone the repository
-git clone https://github.com/nikhilsundriya/nebulax-collective-v2.git
-cd nebulax-collective-v2
+git clone https://github.com/nikhilsundriya/NebulaX.git
+cd NebulaX
 
 # Install dependencies
 npm install
@@ -223,8 +219,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Open source community** - For the tools and libraries
 
 ---
-
-<p align="center">
-  <a href="https://nebulax-collective.com.au">Live Site</a> &bull;
-  <a href="https://nebulax-collective.com.au/devlog">Devlog</a>
-</p>
