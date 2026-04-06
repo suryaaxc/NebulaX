@@ -215,5 +215,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **CSIRO** - Australian radio telescope data
 - **CDS Strasbourg** - Aladin Lite sky viewer
 - **Open source community** - For the tools and libraries
-
----
