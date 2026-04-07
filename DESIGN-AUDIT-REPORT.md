@@ -8,7 +8,7 @@
 
 ---
 
-## Executive Summary
+## Executive Summary 
 
 NebulaX v2 is a well-architected, visually polished astronomy platform. The design system foundations are strong (astronomy-authentic colors, glassmorphism, consistent typography). The main issues cluster into 5 themes:
 
