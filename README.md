@@ -11,7 +11,7 @@ NebulaX is an interactive platform for exploring the universe through multiple w
 ## Landing Page
 
 The hero section features a live 75vw × 62vh Solar System preview — an interactive iframe of the full Three.js simulation that fills the above-the-fold viewport. Clicking anywhere on it navigates to `/solar-system` for the complete experience.
-
+ 
 ## Interactive Apps
 
 ### JWST Explorer (`/jwst`)
