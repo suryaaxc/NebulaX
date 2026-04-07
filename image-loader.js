@@ -1,5 +1,5 @@
 /**
- * Custom Image Loader for Next.js
+ * Custom Image Loader for Next.js 
  * Handles NASA API images with fallback and error handling
  */
 
