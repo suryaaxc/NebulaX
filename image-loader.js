@@ -18,7 +18,7 @@ export default function customImageLoader({ src, width, quality }) {
     return `/api/image-proxy?${params.join('&')}`
   }
 
-  // In development or for internal images, return original URL
+  // In development or for internal images, return original URL 
   if (isNASA || isExternalImage) {
     return src
   }
