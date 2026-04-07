@@ -1,6 +1,6 @@
 {
   "name": "nebulax-collective",
-  "version": "2.0.0",
+  "version": "2.0.0", 
   "description": "Multi-spectrum astronomical data exploration platform with citizen science features",
   "private": true,
   "scripts": {
