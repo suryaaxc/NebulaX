@@ -12,7 +12,7 @@ const config: Config = {
       colors: {
         // Astronomy-Authentic Palette (Based on Real Space Observations)
         nebulax: {
-          // Deep space backgrounds (warmer, more depth)
+          // Deep space backgrounds (warmer, more depth) 
           void: '#0a0e1a',        // Deep space observation
           depth: '#131820',       // Nebula background
           surface: '#1a1f2e',     // Professional panels
